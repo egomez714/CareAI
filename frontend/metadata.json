@@ -1,0 +1,5 @@
+{
+  "name": "TheraSync AI",
+  "description": "A therapist dashboard for managing patients and scheduling AI checkup calls.",
+  "requestFramePermissions": []
+}
