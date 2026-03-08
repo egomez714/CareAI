@@ -57,7 +57,6 @@ def get_patient_by_mrn(mrn: str):
     try:
         patient = patients_collection.find_one({"patient_mrn": mrn})
         if patient:
-            # Calculate dynamic warnings
             now = datetime.now(timezone.utc)
             missed = patient.get("consecutive_missed_calls", 0)
             last_success = patient.get("last_successful_call")
@@ -67,7 +66,10 @@ def get_patient_by_mrn(mrn: str):
                 warnings.append("URGENT: 3+ Missed Calls")
             
             if last_success:
-                # Check if it's been more than 3 days (using native datetime comparison)
+                # 🛠️ FIX: Make PyMongo's datetime timezone-aware!
+                if last_success.tzinfo is None:
+                    last_success = last_success.replace(tzinfo=timezone.utc)
+                
                 if now - last_success > timedelta(days=3):
                     warnings.append("INACTIVE: No check-in for 3+ days")
             
@@ -76,4 +78,13 @@ def get_patient_by_mrn(mrn: str):
         return patient
     except Exception as e:
         print(f"Error: {e}")
+        return None
+
+def get_patient_by_phone(phone: str):
+    try:
+        # Standardize phone search (optional, depends on how you store them)
+        patient = patients_collection.find_one({"patient_phone": phone})
+        return patient
+    except Exception as e:
+        print(f"Error finding patient by phone: {e}")
         return None

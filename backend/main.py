@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconn
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import re
 from google import genai
@@ -16,6 +16,7 @@ from google import genai
 from database.mongo_config import (
     create_or_update_patient, 
     get_patient_by_mrn, 
+    get_patient_by_phone,
     record_call_attempt, 
     record_call_completion,
     patients_collection
@@ -151,7 +152,7 @@ async def trigger_call(request: PatientPlan):
         payload = {
             "agent_id": os.getenv("ELEVEN_LABS_AGENT_ID"),
             "to_number": request.patient_phone,
-            "agent_phone_number_id": "phnum_2701kk4vb81mf11vz1wygp7hj4j2",
+            "agent_phone_number_id": os.getenv("ELEVEN_LABS_PHONE_ID"),
             "conversation_initiation_client_data": {
                 "dynamic_variables": {
                     "patient_mrn": request.patient_mrn,
@@ -176,23 +177,54 @@ async def trigger_call(request: PatientPlan):
 
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
+def find_key_recursive(data, target_key):
+    """Recursively search for a key in a nested dictionary/list."""
+    if isinstance(data, dict):
+        if target_key in data:
+            return data[target_key]
+        for key, value in data.items():
+            result = find_key_recursive(value, target_key)
+            if result:
+                return result
+    elif isinstance(data, list):
+        for item in data:
+            result = find_key_recursive(item, target_key)
+            if result:
+                return result
+    return None
+
 @app.post("/api/webhook/transcript")
 async def handle_transcript(request: Request):
     try:
         payload = await request.json()
+        
+        # --- 🛑 HACKATHON DEBUG TRAP ---
+        print("\n=== 🚨 RAW ELEVENLABS PAYLOAD RECEIVED ===")
+        with open("debug_webhook.json", "w") as f:
+            json.dump(payload, f, indent=4)
+        print("✅ Saved raw data to 'debug_webhook.json'")
+        print("==========================================\n")
+        
         payload_type = payload.get("type")
         print(f"📩 Webhook Received: {payload_type}")
         
-        # 1. FIND MRN FIRST
+        # 1. FIND MRN FIRST (OR PHONE FALLBACK)
         patient_mrn = find_key_recursive(payload, "patient_mrn")
+        patient_phone = find_key_recursive(payload, "patient_phone")
         patient_name = find_key_recursive(payload, "patient_name") or "Unknown"
 
+        if not patient_mrn and patient_phone:
+            patient = get_patient_by_phone(patient_phone)
+            if patient:
+                patient_mrn = patient.get("patient_mrn")
+                patient_name = patient.get("patient_name", patient_name)
+
         if not patient_mrn:
-            print("⚠️ Critical: Could not find MRN in payload.")
+            print("⚠️ Critical: Could not find MRN in payload or via phone fallback.")
             return {"status": "ignored"}
 
         # 2. HANDLE 'call_ended' or 'call_initiation_failed'
-        if payload_type in ["call_ended", "call_initiation_failed"]:
+        if payload_type in ["call_ended", "call_initiation_failed"] or (not payload_type and "summary" in payload):
             if payload_type == "call_initiation_failed":
                 print(f"❌ Call failed to initiate for {patient_mrn}")
                 record_call_completion(patient_mrn, success=False)
@@ -200,24 +232,59 @@ async def handle_transcript(request: Request):
                 return {"status": "success"}
 
             status = payload.get("call", {}).get("status", "unknown")
-            print(f"📞 Call Ended with status: {status}")
+            print(f"📞 Call Status: {status or payload.get('call_status')}")
             
-            # Definitive missed call
             if status in ["no-answer", "busy", "failed"]:
                 print(f"📉 Recording missed call for {patient_mrn}")
                 record_call_completion(patient_mrn, success=False)
                 await manager.broadcast({"type": "CALL_MISSED", "mrn": patient_mrn, "name": patient_name})
+            
+            if "summary" in payload:
+                analysis_data = {
+                    "date": datetime.now(timezone.utc).strftime('%b %d, %Y'),
+                    "mood": "Stable",
+                    "clinical_summary": payload.get("summary"),
+                    "risk_level": payload.get("risk_level", "Medium").capitalize(),
+                    "is_warning_flagged": payload.get("is_warning_flagged", False)
+                }
+                
+                mood_match = re.search(r'Mood:\s*(\d+)', payload.get("summary", ""))
+                if mood_match:
+                    score = int(mood_match.group(1))
+                    analysis_data["mood"] = "Improving" if score > 7 else "Stable" if score > 4 else "Declining"
+                
+                create_or_update_patient({
+                    "patient_mrn": patient_mrn,
+                    "latest_analysis": analysis_data,
+                    "call_status": payload.get("call_status", "Completed"),
+                    "eleven_labs_last_call_metadata": payload
+                })
+                
+                await manager.broadcast({
+                    "type": "NEW_ANALYSIS", 
+                    "mrn": patient_mrn, 
+                    "name": patient_name,
+                    "analysis": analysis_data
+                })
+
+            else:
+                create_or_update_patient({
+                    "patient_mrn": patient_mrn,
+                    "eleven_labs_last_call_metadata": payload
+                })
             
             return {"status": "success"}
 
         # 3. HANDLE 'post_call_transcription'
         if payload_type == "post_call_transcription":
             print(f"🔍 Processing Analysis for: {patient_name} (MRN: {patient_mrn})")
-            transcript_data = payload.get("transcript", [])
             
-            # DETECTION: Did they actually speak?
+            # 🚨 THE FIX: Dig into the "data" object!
+            payload_data = payload.get("data", {})
+            transcript_data = payload_data.get("transcript", [])
+            
             if len(transcript_data) > 1:
-                print(f"✅ Interaction detected. Resetting missed calls for {patient_mrn}")
+                print(f"✅ Interaction detected for {patient_mrn}")
                 record_call_completion(patient_mrn, success=True)
             else:
                 print(f"📉 Silent transcript. Recording missed call for {patient_mrn}")
@@ -225,72 +292,63 @@ async def handle_transcript(request: Request):
                 await manager.broadcast({"type": "CALL_MISSED", "mrn": patient_mrn, "name": patient_name})
                 return {"status": "missed_call"}
 
-            raw_text = "\n".join([f"{t['role'].upper()}: {t['message']}" for t in transcript_data])
+            # Grab the raw transcript securely
+            raw_text = "\n".join([f"{t.get('role', 'UNKNOWN').upper()}: {t.get('message', '')}" for t in transcript_data if t.get('message')])
             
+            # Grab whatever JSON object your partner's tool outputted from the "data" object
+            partner_json_output = payload_data.get("analysis", {}) 
+            
+            # THE NEW SCRIBE PROMPT
             prompt = f"""
-            Analyze this medical transcript between AI (Emily) and patient ({patient_name}).
-            TRANSCRIPT: {raw_text}
+            You are a clinical medical scribe. Your job is to read the raw data object and the transcript from an AI check-in, and translate it into a single, professional, human-readable summary paragraph.
+            
+            ### RAW DATA OBJECT FROM TOOL:
+            {json.dumps(partner_json_output)}
+            
+            ### TRANSCRIPT:
+            {raw_text}
 
             ### INSTRUCTIONS:
-            Return a STRICT JSON object with these EXACT keys:
-            "date": "{datetime.now().strftime('%b %d, %Y')}",
-            "mood": "Stable/Improving/Declining",
-            "depression_level": "NUMBER ONLY 1-10",
-            "anxiety_level": "NUMBER ONLY 1-10",
-            "si_status": "Flagged/Stable/Unknown",
-            "adherence_score": "NUMBER ONLY 1-10",
-            "clinical_summary": "One sentence summary",
-            "risk_level": "Low/Medium/High"
+            Return a STRICT JSON object with exactly ONE key called "clinical_summary".
+            The value should be a 2-3 sentence natural language summary of the patient's state, mentioning their scores and safety status.
+            Do not include any markdown formatting.
             """
             
             try:
-                print("🧠 Asking Gemini to analyze...")
-                gemini_response = client.models.generate_content(model='gemini-2.0-flash', contents=prompt)
-                response_text = gemini_response.text
-                clean_json = re.sub(r'```json|```', '', response_text).strip()
-                analysis_data = json.loads(clean_json)
+                print("🧠 Asking Gemini to write the human summary...")
+                gemini_response = client.models.generate_content(
+                    model='gemini-2.0-flash', 
+                    contents=prompt,
+                    config={"response_mime_type": "application/json"}
+                )
                 
-                # Sanitize scores to be numbers
-                analysis_data["depression_level"] = re.sub(r'[^0-9]', '', str(analysis_data.get("depression_level", "1")))
-                analysis_data["anxiety_level"] = re.sub(r'[^0-9]', '', str(analysis_data.get("anxiety_level", "1")))
+                analysis_data = json.loads(gemini_response.text)
+                
+                final_save_data = {
+                    "date": datetime.now(timezone.utc).strftime('%b %d, %Y'),
+                    "clinical_summary": analysis_data.get("clinical_summary", "Summary unavailable."),
+                    "call_status": "Completed"
+                }
 
                 create_or_update_patient({
                     "patient_mrn": patient_mrn,
-                    "latest_analysis": analysis_data,
+                    "latest_analysis": final_save_data,
                     "raw_transcript": raw_text,
-                    "call_status": "Completed"
+                    "eleven_labs_post_call_payload": payload
                 })
 
                 await manager.broadcast({
                     "type": "NEW_ANALYSIS", 
                     "mrn": patient_mrn, 
                     "name": patient_name,
-                    "analysis": analysis_data
+                    "analysis": final_save_data
                 })
-                print("✨ Successfully processed call.")
+                print(f"✨ Successfully wrote human summary: {final_save_data['clinical_summary']}")
                 return {"status": "success"}
-            
+                
             except Exception as e:
                 print(f"❌ Analysis failed: {e}")
-                fallback_analysis = {
-                    "date": datetime.now().strftime('%b %d, %Y'),
-                    "mood": "Unknown",
-                    "depression_level": "1",
-                    "anxiety_level": "1",
-                    "si_status": "Unknown",
-                    "clinical_summary": "Incomplete data from call.",
-                    "risk_level": "Medium"
-                }
-                create_or_update_patient({
-                    "patient_mrn": patient_mrn,
-                    "latest_analysis": fallback_analysis,
-                    "raw_transcript": raw_text,
-                    "call_status": "Interrupted"
-                })
-                await manager.broadcast({"type": "NEW_ANALYSIS", "mrn": patient_mrn, "name": patient_name})
                 return {"status": "parse_error"}
-
-        return {"status": "ignored"}
     except Exception as e:
         print(f"🚨 Webhook Crash: {e}")
         return {"status": "error"}

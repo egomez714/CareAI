@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Bot, ChevronLeft, Calendar, Clock, FileText, PhoneMissed, ClipboardList, CheckCircle2, Circle, Clock3, FileDown, ChevronDown, ChevronUp, X, AlertTriangle } from 'lucide-react';
-import { patients as initialPatients } from '../data/mockData';
+
 import { ScheduleModal } from './ScheduleModal';
 import { AddPatientModal } from './AddPatientModal';
 import { motion, AnimatePresence } from 'motion/react';
@@ -10,7 +10,6 @@ interface DashboardProps {
 }
 
 export function Dashboard({ setCurrentView }: DashboardProps) {
-  const [patientsList, setPatientsList] = useState(initialPatients);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -18,24 +17,40 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
   const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null);
   const [newlyAddedPatientId, setNewlyAddedPatientId] = useState<string | null>(null);
 
-  // --- DATA SYNC LOGIC ---
+  const [patientsList, setPatientsList] = useState([]);
+
+  // --- STRICT MONGODB SYNC LOGIC ---
   const syncWithBackend = useCallback(async () => {
     try {
-      console.log("🔄 Syncing Dashboard with MongoDB...");
+      console.log("🔄 Fetching patients strictly from MongoDB...");
       const response = await fetch('http://localhost:8000/api/patients');
+      
       if (response.ok) {
         const dbPatients = await response.json();
-        setPatientsList(prev => {
-          return prev.map(mockPatient => {
-            const dbMatch = dbPatients.find((p: any) => p.mrn === mockPatient.mrn);
-            // Merge mock metadata (avatar, phone) with real DB stats (risk, missed calls)
-            return dbMatch ? { ...mockPatient, ...dbMatch } : mockPatient;
-          });
-        });
-        console.log("✅ Sync complete.");
+        
+        // 2. Map the DB data to match exactly what your React UI expects
+        const formattedPatients = dbPatients.map(dbPatient => ({
+          id: dbPatient.mrn, // FIX: Map DB 'mrn' to UI 'id'
+          name: dbPatient.name,
+          mrn: dbPatient.mrn,
+          phone: dbPatient.patient_phone || "No phone listed",
+          riskLevel: dbPatient.riskLevel || "Low",
+          mood: dbPatient.mood || "Stable",
+          missedCalls: dbPatient.missedCalls || 0,
+          nextSession: dbPatient.nextSession || "Pending",
+          lastSession: dbPatient.lastSession || "Unknown",
+          // Fallbacks for UI graphics
+          avatarUrl: dbPatient.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(dbPatient.name)}&background=random`,
+          conditions: dbPatient.conditions || ["General Monitoring"],
+          actionPlans: dbPatient.actionPlans || [],
+          latest_analysis: dbPatient.latest_analysis || null
+        }));
+
+        setPatientsList(formattedPatients);
+        console.log("✅ Loaded from DB:", formattedPatients);
       }
     } catch (err) {
-      console.error("❌ Sync failed:", err);
+      console.error("❌ Fetch failed:", err);
     }
   }, []);
 
@@ -63,16 +78,15 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
 
     socket.onopen = () => {
       console.log("✅ Connected to CareAI Live Updates");
-      syncWithBackend(); // Sync again on reconnection to catch missed broadcasts
+      syncWithBackend(); 
     };
     
     socket.onclose = () => console.log("❌ Disconnected from Live Updates");
-    socket.onerror = (err) => console.error("WebSocket Error:", err);
 
     return () => socket.close();
   }, [syncWithBackend]);
 
-  const refreshPatientData = async (mrn: string) => {
+  const refreshPatientData = async (mrn) => {
     try {
       const response = await fetch(`http://localhost:8000/api/patients/${mrn}`);
       if (!response.ok) throw new Error("Failed to fetch updated patient");
@@ -82,8 +96,9 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
 
       setPatientsList(prev => {
         return prev.map(p => {
+          // Match by MRN (or ID as fallback)
           if (p.mrn === mrn || p.id === mrn) {
-            console.log(`Matching patient found: ${p.name}. Updating state...`);
+            console.log(`Matching patient found: ${p.name}. Updating UI state...`);
             return { ...p, ...updatedPatient };
           }
           return p;
@@ -93,7 +108,6 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
       console.error("Failed to refresh patient state:", err);
     }
   };
-  // ---------------------------
 
   const getDaysUntil = (dateString: string) => {
     const today = new Date();

@@ -194,6 +194,26 @@ export function ScheduleModal({ isOpen, onClose, patient }: any) {
                 </p>
               </div>
 
+              {/* 🧠 NEW: Gemini AI Insight Display */}
+              <div className="p-4 bg-emerald-50/60 dark:bg-emerald-900/20 rounded-xl border border-emerald-100 dark:border-emerald-800/40">
+                <label className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-400 uppercase tracking-wider mb-2">
+                  <Bot size={14} />
+                  Latest AI Checkup Analysis
+                </label>
+                <p className="text-sm text-stone-800 dark:text-stone-200 leading-relaxed">
+                  {patient.latest_analysis?.clinical_summary ? (
+                    patient.latest_analysis.clinical_summary
+                  ) : (
+                    <span className="text-stone-400 italic">No AI checkup data available yet. Trigger a call to generate an insight.</span>
+                  )}
+                </p>
+                {patient.latest_analysis?.date && (
+                   <p className="text-xs text-emerald-600/70 dark:text-emerald-400/60 mt-2 font-medium">
+                     Last updated: {patient.latest_analysis.date}
+                   </p>
+                )}
+              </div>
+
               <div className="flex flex-col gap-4">
                 <div>
                   <label className="block text-sm font-medium text-stone-700 dark:text-stone-300 mb-2">Select Date</label>
