@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Bot, ChevronLeft, Calendar, Clock, FileText, PhoneMissed, ClipboardList, CheckCircle2, Circle, Clock3, FileDown, ChevronDown, ChevronUp, X, AlertTriangle } from 'lucide-react';
 
 import { ScheduleModal } from './ScheduleModal';
@@ -18,7 +18,7 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
   const [newlyAddedPatientId, setNewlyAddedPatientId] = useState<string | null>(null);
   const [expandedCallId, setExpandedCallId] = useState<number | null>(null);
 
-  const [patientsList, setPatientsList] = useState([]);
+  const [patientsList, setPatientsList] = useState<any[]>([]);
 
   // --- STRICT MONGODB SYNC LOGIC ---
   const syncWithBackend = useCallback(async () => {
@@ -29,19 +29,25 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
       if (response.ok) {
         const dbPatients = await response.json();
         
-        // 2. Map the DB data to match exactly what your React UI expects
-        const formattedPatients = dbPatients.map(dbPatient => ({
-          id: dbPatient.mrn, // FIX: Map DB 'mrn' to UI 'id'
-          name: dbPatient.name,
-          mrn: dbPatient.mrn,
-          phone: dbPatient.patient_phone || "No phone listed",
+        // Map the DB data to match exactly what your React UI expects
+        const formattedPatients = dbPatients.map((dbPatient: any) => ({
+          id: dbPatient.mrn, // Map DB 'mrn' to UI 'id'
+          name: dbPatient.name || "Unknown Patient",
+          mrn: dbPatient.mrn || "Unknown MRN",
+          
+          // 🚨 FIX: Added age mapping for the UI (defaults to 42 for the demo if missing)
+          age: dbPatient.age || 42,
+          
+          // FIX: Added robust phone mapping
+          phone: dbPatient.patient_phone || dbPatient.phone || "+1 (555) 000-0000",
+          
           riskLevel: dbPatient.riskLevel || "Low",
           mood: dbPatient.mood || "Stable",
           missedCalls: dbPatient.missedCalls || 0,
           nextSession: dbPatient.nextSession || "Pending",
           lastSession: dbPatient.lastSession || "Unknown",
           // Fallbacks for UI graphics
-          avatarUrl: dbPatient.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(dbPatient.name)}&background=random`,
+          avatarUrl: dbPatient.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(dbPatient.name || "User")}&background=random`,
           conditions: dbPatient.conditions || ["General Monitoring"],
           actionPlans: dbPatient.actionPlans || [],
           latest_analysis: dbPatient.latest_analysis || null
@@ -87,7 +93,7 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
     return () => socket.close();
   }, [syncWithBackend]);
 
-  const refreshPatientData = async (mrn) => {
+  const refreshPatientData = async (mrn: string) => {
     try {
       const response = await fetch(`http://localhost:8000/api/patients/${mrn}`);
       if (!response.ok) throw new Error("Failed to fetch updated patient");
@@ -100,7 +106,7 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
           // Match by MRN (or ID as fallback)
           if (p.mrn === mrn || p.id === mrn) {
             console.log(`Matching patient found: ${p.name}. Updating UI state...`);
-            return { ...p, ...updatedPatient };
+            return { ...p, ...updatedPatient, age: updatedPatient.age || p.age, phone: updatedPatient.patient_phone || p.phone };
           }
           return p;
         });
@@ -111,6 +117,7 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
   };
 
   const getDaysUntil = (dateString: string) => {
+    if (!dateString || dateString === 'Pending') return 'Pending';
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const nextDate = new Date(dateString);
@@ -124,7 +131,7 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
   };
 
   const formatSessionDate = (dateString: string) => {
-    if (!dateString || dateString === 'Never') return dateString;
+    if (!dateString || dateString === 'Never' || dateString === 'Pending') return dateString;
     try {
       const date = new Date(dateString);
       if (isNaN(date.getTime())) return dateString;
@@ -142,6 +149,10 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
 
   const togglePlan = (id: string) => {
     setExpandedPlanId(prev => prev === id ? null : id);
+  };
+
+  const toggleCall = (id: number) => {
+    setExpandedCallId(prev => prev === id ? null : id);
   };
 
   const handleAddPatient = (newPatient: any) => {
@@ -186,8 +197,8 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
               </div>
               <div className="flex gap-2 mt-4">
                 <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                  selectedPatient.mood === 'improving' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400' :
-                  selectedPatient.mood === 'declining' ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400' :
+                  selectedPatient.mood === 'Improving' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400' :
+                  selectedPatient.mood === 'Declining' ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400' :
                   'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400'
                 }`}>
                   Mood: {selectedPatient.mood}
@@ -220,70 +231,70 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
         {/* Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            {/* Call Logs */}
+            
+            {/* 🧠 AI Checkup Logs Data Integration */}
             <div className="bg-white dark:bg-stone-800 p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-sm">
               <div className="flex items-center gap-2 mb-4">
-                <Bot size={20} className="text-indigo-600 dark:text-indigo-400" />
+                <Bot size={20} className="text-emerald-600 dark:text-emerald-400" />
                 <h3 className="text-lg font-medium text-stone-900 dark:text-white">AI Checkup Call Logs</h3>
               </div>
-              {selectedPatient.aiCalls > 0 ? (
+              
+              {selectedPatient.latest_analysis ? (
                 <div className="space-y-3">
-                  {Array.from({ length: selectedPatient.aiCalls }).map((_, i) => {
-                    const date = new Date();
-                    date.setDate(date.getDate() - (i * 7 + 3)); // Mocking dates in the past
-                    return (
-                      <div key={i} className="border border-stone-200 dark:border-stone-700 rounded-xl overflow-hidden bg-stone-50 dark:bg-stone-800/50 transition-all">
-                        <button 
-                          onClick={() => toggleCall(i)}
-                          className="w-full flex items-center justify-between p-3 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700/50 transition-colors"
-                        >
-                          <div className="flex items-center gap-3 text-left">
-                            <div className="relative w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
-                              <Bot size={14} className="text-indigo-600 dark:text-indigo-400" />
-                              {selectedPatient.hasUnreadAICall && i === 0 && (
-                                <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                                  <span className="relative inline-flex rounded-full h-3 w-3 bg-indigo-500 border-2 border-white dark:border-stone-800"></span>
-                                </span>
-                              )}
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium text-stone-900 dark:text-white">Checkup Call</p>
-                              <p className="text-xs text-stone-500 dark:text-stone-400">{date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 px-3 py-1.5 rounded-lg transition-colors">
-                              View Transcript
-                            </span>
-                            {expandedCallId === i ? <ChevronUp size={16} className="text-stone-400 dark:text-stone-500" /> : <ChevronDown size={16} className="text-stone-400 dark:text-stone-500" />}
-                          </div>
-                        </button>
-                        
-                        {expandedCallId === i && (
-                          <div className="p-4 border-t border-stone-200 dark:border-stone-700 bg-stone-50/50 dark:bg-stone-800/30">
-                            <div>
-                              <p className="text-xs text-stone-500 dark:text-stone-400 uppercase tracking-wider font-semibold mb-1">AI Summary</p>
-                              <p className="text-sm text-stone-600 dark:text-stone-300 leading-relaxed">
-                                {i === 0 
-                                  ? "Patient reported normal sleep patterns over the last few days. Expressed mild anxiety regarding upcoming work deadlines, but demonstrated good use of coping mechanisms discussed in the last session."
-                                  : "Patient discussed feelings of overwhelm related to family obligations. AI guided them through a brief grounding exercise which successfully reduced immediate stress markers."}
-                              </p>
-                            </div>
-                            <div className="mt-4">
-                              <button className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors flex items-center gap-1">
-                                <FileText size={14} />
-                                View Full Transcript
-                              </button>
-                            </div>
-                          </div>
-                        )}
+                  <div className="border border-emerald-100 dark:border-emerald-800/40 rounded-xl overflow-hidden bg-stone-50 dark:bg-stone-800/50 transition-all">
+                    <button 
+                      onClick={() => toggleCall(0)}
+                      className="w-full flex items-center justify-between p-3 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3 text-left">
+                        <div className="relative w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
+                          <Bot size={14} className="text-emerald-600 dark:text-emerald-400" />
+                          <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border-2 border-white dark:border-stone-800"></span>
+                          </span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-stone-900 dark:text-white">Latest AI Checkup</p>
+                          <p className="text-xs text-stone-500 dark:text-stone-400">{selectedPatient.latest_analysis.date}</p>
+                        </div>
                       </div>
-                    );
-                  })}
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1.5 rounded-lg transition-colors">
+                          View Insight
+                        </span>
+                        {expandedCallId === 0 ? <ChevronUp size={16} className="text-stone-400 dark:text-stone-500" /> : <ChevronDown size={16} className="text-stone-400 dark:text-stone-500" />}
+                      </div>
+                    </button>
+                    
+                    {expandedCallId === 0 && (
+                      <div className="p-4 border-t border-emerald-100 dark:border-emerald-800/40 bg-emerald-50/30 dark:bg-emerald-900/10">
+                        <div>
+                          <p className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 uppercase tracking-wider font-bold mb-2">
+                            <Bot size={14} /> Gemini Clinical Summary
+                          </p>
+                          <p className="text-sm text-stone-700 dark:text-stone-200 leading-relaxed font-medium">
+                            {selectedPatient.latest_analysis.clinical_summary}
+                          </p>
+                        </div>
+                        <div className="mt-4 flex gap-4 items-center border-t border-stone-200/60 dark:border-stone-700 pt-3">
+                          {selectedPatient.latest_analysis.mood && (
+                             <div className="text-xs text-stone-500 dark:text-stone-400">
+                               <span className="font-semibold text-stone-700 dark:text-stone-300">Detected Mood:</span> {selectedPatient.latest_analysis.mood}
+                             </div>
+                          )}
+                          {selectedPatient.latest_analysis.risk_level && (
+                             <div className="text-xs text-stone-500 dark:text-stone-400">
+                               <span className="font-semibold text-stone-700 dark:text-stone-300">Assessed Risk:</span> {selectedPatient.latest_analysis.risk_level}
+                             </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : (
-                <p className="text-sm text-stone-500 dark:text-stone-400">No AI checkups have been conducted yet. Schedule one to gather automated insights between sessions.</p>
+                <p className="text-sm text-stone-500 dark:text-stone-400 italic">No AI checkups have been conducted yet. Schedule one to gather automated insights between sessions.</p>
               )}
             </div>
           </div>
@@ -298,9 +309,11 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
                   <div className="flex items-center gap-2 text-stone-900 dark:text-stone-100">
                     <Calendar size={16} className="text-emerald-600 dark:text-emerald-500" />
                     <span className="font-medium">{formatSessionDate(selectedPatient.nextSession)}</span>
-                    <span className="text-xs text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-700 px-2 py-0.5 rounded-full">
-                      {getDaysUntil(selectedPatient.nextSession)}
-                    </span>
+                    {selectedPatient.nextSession !== 'Pending' && (
+                      <span className="text-xs text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-700 px-2 py-0.5 rounded-full">
+                        {getDaysUntil(selectedPatient.nextSession)}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div>
@@ -404,10 +417,10 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
               <div className="flex items-center gap-4">
                 <div className="relative">
                   <img src={patient.avatarUrl} alt={patient.name} className="w-12 h-12 rounded-full object-cover" referrerPolicy="no-referrer" />
-                  {patient.hasUnreadAICall && (
+                  {patient.latest_analysis && (
                     <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-indigo-500 border-2 border-white dark:border-stone-800"></span>
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white dark:border-stone-800"></span>
                     </span>
                   )}
                 </div>
@@ -448,9 +461,11 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
                   <p className="text-sm font-medium text-stone-900 dark:text-stone-100">Next Session</p>
                   <div className="flex items-center justify-end gap-2 mt-0.5">
                     <p className="text-sm text-stone-500 dark:text-stone-400">{formatSessionDate(patient.nextSession)}</p>
-                    <span className="text-xs text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-700 px-2 py-0.5 rounded-full">
-                      {getDaysUntil(patient.nextSession)}
-                    </span>
+                    {patient.nextSession !== 'Pending' && (
+                      <span className="text-xs text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-700 px-2 py-0.5 rounded-full">
+                        {getDaysUntil(patient.nextSession)}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
