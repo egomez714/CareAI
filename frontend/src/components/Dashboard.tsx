@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Bot, ChevronLeft, Calendar, Clock, FileText, PhoneMissed, ClipboardList, CheckCircle2, Circle, Clock3, FileDown, ChevronDown, ChevronUp, X, AlertTriangle } from 'lucide-react';
 import { patients as initialPatients } from '../data/mockData';
 import { ScheduleModal } from './ScheduleModal';
@@ -17,6 +17,83 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
   const [patientForSchedule, setPatientForSchedule] = useState<any>(null);
   const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null);
   const [newlyAddedPatientId, setNewlyAddedPatientId] = useState<string | null>(null);
+
+  // --- DATA SYNC LOGIC ---
+  const syncWithBackend = useCallback(async () => {
+    try {
+      console.log("🔄 Syncing Dashboard with MongoDB...");
+      const response = await fetch('http://localhost:8000/api/patients');
+      if (response.ok) {
+        const dbPatients = await response.json();
+        setPatientsList(prev => {
+          return prev.map(mockPatient => {
+            const dbMatch = dbPatients.find((p: any) => p.mrn === mockPatient.mrn);
+            // Merge mock metadata (avatar, phone) with real DB stats (risk, missed calls)
+            return dbMatch ? { ...mockPatient, ...dbMatch } : mockPatient;
+          });
+        });
+        console.log("✅ Sync complete.");
+      }
+    } catch (err) {
+      console.error("❌ Sync failed:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    syncWithBackend(); // Sync on mount
+  }, [syncWithBackend]);
+
+  // --- LIVE UPDATES LOGIC ---
+  useEffect(() => {
+    const socket = new WebSocket('ws://localhost:8000/ws/updates');
+
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log("🚀 Live Update Received:", data);
+
+        if (data.type === 'NEW_ANALYSIS' || data.type === 'CALL_MISSED') {
+          console.log(`Refreshing data for MRN: ${data.mrn}`);
+          refreshPatientData(data.mrn);
+        }
+      } catch (err) {
+        console.error("Error parsing WebSocket message:", err);
+      }
+    };
+
+    socket.onopen = () => {
+      console.log("✅ Connected to CareAI Live Updates");
+      syncWithBackend(); // Sync again on reconnection to catch missed broadcasts
+    };
+    
+    socket.onclose = () => console.log("❌ Disconnected from Live Updates");
+    socket.onerror = (err) => console.error("WebSocket Error:", err);
+
+    return () => socket.close();
+  }, [syncWithBackend]);
+
+  const refreshPatientData = async (mrn: string) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/patients/${mrn}`);
+      if (!response.ok) throw new Error("Failed to fetch updated patient");
+      
+      const updatedPatient = await response.json();
+      console.log("📥 New Patient Data from DB:", updatedPatient);
+
+      setPatientsList(prev => {
+        return prev.map(p => {
+          if (p.mrn === mrn || p.id === mrn) {
+            console.log(`Matching patient found: ${p.name}. Updating state...`);
+            return { ...p, ...updatedPatient };
+          }
+          return p;
+        });
+      });
+    } catch (err) {
+      console.error("Failed to refresh patient state:", err);
+    }
+  };
+  // ---------------------------
 
   const getDaysUntil = (dateString: string) => {
     const today = new Date();
@@ -71,7 +148,11 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
             <div>
               <h1 className="text-3xl font-semibold text-stone-900 dark:text-white">{selectedPatient.name}</h1>
               <div className="text-stone-500 dark:text-stone-400 mt-1 flex flex-wrap items-center gap-2">
+                <span className="font-mono bg-stone-100 dark:bg-stone-700 px-2 py-0.5 rounded text-xs">{selectedPatient.mrn}</span>
+                <span>•</span>
                 <span>{selectedPatient.age} years old</span>
+                <span>•</span>
+                <span>{selectedPatient.phone}</span>
                 <span>•</span>
                 <div className="flex flex-wrap gap-1">
                   {selectedPatient.conditions.map((condition: string, index: number) => (
@@ -120,22 +201,68 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
         {/* Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            {/* AI Insights */}
-            <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 p-6 rounded-2xl border border-indigo-100 dark:border-indigo-800/30 shadow-sm">
-              <div className="flex items-center gap-2 mb-4">
+            {/* AI Insights Table */}
+            <div className="bg-white dark:bg-stone-800 p-6 rounded-2xl border border-indigo-100 dark:border-indigo-800/30 shadow-sm">
+              <div className="flex items-center gap-2 mb-6">
                 <Bot size={20} className="text-indigo-600 dark:text-indigo-400" />
-                <h3 className="text-lg font-medium text-indigo-900 dark:text-indigo-100">AI Checkup Insights</h3>
+                <h3 className="text-lg font-medium text-indigo-900 dark:text-indigo-100">AI Checkup Analysis</h3>
               </div>
-              {selectedPatient.aiCalls > 0 ? (
-                <div className="space-y-4">
-                  <div className="bg-white/60 dark:bg-stone-800/60 p-4 rounded-xl border border-indigo-100/50 dark:border-indigo-800/30">
-                    <p className="text-sm font-medium text-indigo-900 dark:text-indigo-200 mb-1">Latest Call: Oct 22, 2023</p>
-                    <p className="text-sm text-indigo-800/80 dark:text-indigo-200/80">Patient expressed mild frustration with sleep schedule. Sentiment analysis indicates stable overall mood but elevated stress markers in voice tone.</p>
+              
+              {selectedPatient.latest_analysis ? (
+                <div className="overflow-hidden border border-stone-100 dark:border-stone-700 rounded-xl">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-stone-50 dark:bg-stone-900/50">
+                        <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider border-b border-stone-100 dark:border-stone-700">Date</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider border-b border-stone-100 dark:border-stone-700">Depression (1-10)</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider border-b border-stone-100 dark:border-stone-700">Anxiety (1-10)</th>
+                        <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider border-b border-stone-100 dark:border-stone-700">SI Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-stone-100 dark:divide-stone-700">
+                      <tr className="hover:bg-stone-50/50 dark:hover:bg-stone-700/30 transition-colors">
+                        <td className="px-4 py-4 text-sm text-stone-900 dark:text-stone-200 font-medium">
+                          {selectedPatient.latest_analysis.date || "Today"}
+                        </td>
+                        <td className="px-4 py-4 text-sm">
+                          <span className={`px-2 py-1 rounded-lg font-bold ${
+                            Number(selectedPatient.latest_analysis.depression_level) > 7 ? 'text-red-600 bg-red-50' : 
+                            Number(selectedPatient.latest_analysis.depression_level) > 4 ? 'text-amber-600 bg-amber-50' : 'text-emerald-600 bg-emerald-50'
+                          }`}>
+                            {selectedPatient.latest_analysis.depression_level}/10
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-sm">
+                          <span className={`px-2 py-1 rounded-lg font-bold ${
+                            Number(selectedPatient.latest_analysis.anxiety_level) > 7 ? 'text-red-600 bg-red-50' : 
+                            Number(selectedPatient.latest_analysis.anxiety_level) > 4 ? 'text-amber-600 bg-amber-50' : 'text-emerald-600 bg-emerald-50'
+                          }`}>
+                            {selectedPatient.latest_analysis.anxiety_level}/10
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-sm">
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${
+                            selectedPatient.latest_analysis.si_status === 'Flagged' ? 'bg-red-600 text-white animate-pulse' : 
+                            selectedPatient.latest_analysis.si_status === 'Stable' ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-600'
+                          }`}>
+                            {selectedPatient.latest_analysis.si_status === 'Flagged' && <AlertTriangle size={12} />}
+                            {selectedPatient.latest_analysis.si_status}
+                          </span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <div className="p-4 bg-stone-50/50 dark:bg-stone-900/30 border-t border-stone-100 dark:border-stone-700">
+                    <p className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-1">AI Clinical Summary</p>
+                    <p className="text-sm text-stone-700 dark:text-stone-300 italic">
+                      "{selectedPatient.latest_analysis.clinical_summary}"
+                    </p>
                   </div>
-                  <button className="text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:text-indigo-700 dark:hover:text-indigo-300">View Full Transcript & Analysis →</button>
                 </div>
               ) : (
-                <p className="text-sm text-indigo-800/70 dark:text-indigo-200/70">No AI checkups have been conducted yet. Schedule one to gather automated insights between sessions.</p>
+                <div className="text-center py-8 border-2 border-dashed border-stone-100 dark:border-stone-700 rounded-2xl">
+                  <p className="text-sm text-stone-500 dark:text-stone-400">No AI analysis data available yet. Schedule a checkup to generate clinical metrics.</p>
+                </div>
               )}
             </div>
           </div>
@@ -227,7 +354,7 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
         <ScheduleModal 
           isOpen={isScheduleModalOpen} 
           onClose={() => setIsScheduleModalOpen(false)} 
-          patient={patientForSchedule}
+          patient={patientsList.find(p => p.id === patientForSchedule?.id)}
         />
       </div>
     );
@@ -342,7 +469,7 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
       <ScheduleModal 
         isOpen={isScheduleModalOpen} 
         onClose={() => setIsScheduleModalOpen(false)} 
-        patient={patientForSchedule}
+        patient={patientsList.find(p => p.id === patientForSchedule?.id)}
       />
       <AddPatientModal 
         isOpen={isAddModalOpen} 
