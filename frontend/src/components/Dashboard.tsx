@@ -236,7 +236,7 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-8">
       <header>
-        <h1 className="text-3xl font-semibold tracking-tight text-stone-900 dark:text-white">Good morning, Dr. Jenkins</h1>
+        <h1 className="text-3xl font-semibold tracking-tight text-stone-900 dark:text-white">Good morning, Dr. Li</h1>
         <p className="text-stone-500 dark:text-stone-400 mt-1">Here's what's happening with your patients today.</p>
       </header>
 
