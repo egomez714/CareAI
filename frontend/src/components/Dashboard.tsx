@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Bot, ChevronLeft, Calendar, Clock, FileText, PhoneMissed, ClipboardList, CheckCircle2, Circle, Clock3, FileDown, ChevronDown, ChevronUp, X, AlertTriangle } from 'lucide-react';
 
 import { ScheduleModal } from './ScheduleModal';
@@ -16,6 +16,7 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
   const [patientForSchedule, setPatientForSchedule] = useState<any>(null);
   const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null);
   const [newlyAddedPatientId, setNewlyAddedPatientId] = useState<string | null>(null);
+  const [expandedCallId, setExpandedCallId] = useState<number | null>(null);
 
   const [patientsList, setPatientsList] = useState([]);
 
@@ -122,6 +123,17 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
     return `In ${diffDays} days`;
   };
 
+  const formatSessionDate = (dateString: string) => {
+    if (!dateString || dateString === 'Never') return dateString;
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return dateString;
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    } catch (e) {
+      return dateString;
+    }
+  };
+
   const handleScheduleClick = (patient: any, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setPatientForSchedule(patient);
@@ -162,11 +174,7 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
             <div>
               <h1 className="text-3xl font-semibold text-stone-900 dark:text-white">{selectedPatient.name}</h1>
               <div className="text-stone-500 dark:text-stone-400 mt-1 flex flex-wrap items-center gap-2">
-                <span className="font-mono bg-stone-100 dark:bg-stone-700 px-2 py-0.5 rounded text-xs">{selectedPatient.mrn}</span>
-                <span>•</span>
                 <span>{selectedPatient.age} years old</span>
-                <span>•</span>
-                <span>{selectedPatient.phone}</span>
                 <span>•</span>
                 <div className="flex flex-wrap gap-1">
                   {selectedPatient.conditions.map((condition: string, index: number) => (
@@ -177,9 +185,6 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
                 </div>
               </div>
               <div className="flex gap-2 mt-4">
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-stone-100 dark:bg-stone-700 text-stone-800 dark:text-stone-200">
-                  {selectedPatient.aiCalls} AI Checkups completed
-                </span>
                 <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
                   selectedPatient.mood === 'improving' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400' :
                   selectedPatient.mood === 'declining' ? 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400' :
@@ -205,9 +210,9 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
           </div>
           <button 
             onClick={() => handleScheduleClick(selectedPatient)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors shadow-sm shadow-emerald-200"
+            className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-all shadow-md shadow-emerald-200 dark:shadow-none hover:shadow-lg hover:-translate-y-0.5"
           >
-            <Bot size={18} />
+            <Bot size={20} />
             Schedule AI Checkup
           </button>
         </div>
@@ -215,68 +220,70 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
         {/* Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            {/* AI Insights Table */}
-            <div className="bg-white dark:bg-stone-800 p-6 rounded-2xl border border-indigo-100 dark:border-indigo-800/30 shadow-sm">
-              <div className="flex items-center gap-2 mb-6">
+            {/* Call Logs */}
+            <div className="bg-white dark:bg-stone-800 p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
                 <Bot size={20} className="text-indigo-600 dark:text-indigo-400" />
-                <h3 className="text-lg font-medium text-indigo-900 dark:text-indigo-100">AI Checkup Analysis</h3>
+                <h3 className="text-lg font-medium text-stone-900 dark:text-white">AI Checkup Call Logs</h3>
               </div>
-              
-              {selectedPatient.latest_analysis ? (
-                <div className="overflow-hidden border border-stone-100 dark:border-stone-700 rounded-xl">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-stone-50 dark:bg-stone-900/50">
-                        <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider border-b border-stone-100 dark:border-stone-700">Date</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider border-b border-stone-100 dark:border-stone-700">Depression (1-10)</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider border-b border-stone-100 dark:border-stone-700">Anxiety (1-10)</th>
-                        <th className="px-4 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider border-b border-stone-100 dark:border-stone-700">SI Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-stone-100 dark:divide-stone-700">
-                      <tr className="hover:bg-stone-50/50 dark:hover:bg-stone-700/30 transition-colors">
-                        <td className="px-4 py-4 text-sm text-stone-900 dark:text-stone-200 font-medium">
-                          {selectedPatient.latest_analysis.date || "Today"}
-                        </td>
-                        <td className="px-4 py-4 text-sm">
-                          <span className={`px-2 py-1 rounded-lg font-bold ${
-                            Number(selectedPatient.latest_analysis.depression_level) > 7 ? 'text-red-600 bg-red-50' : 
-                            Number(selectedPatient.latest_analysis.depression_level) > 4 ? 'text-amber-600 bg-amber-50' : 'text-emerald-600 bg-emerald-50'
-                          }`}>
-                            {selectedPatient.latest_analysis.depression_level}/10
-                          </span>
-                        </td>
-                        <td className="px-4 py-4 text-sm">
-                          <span className={`px-2 py-1 rounded-lg font-bold ${
-                            Number(selectedPatient.latest_analysis.anxiety_level) > 7 ? 'text-red-600 bg-red-50' : 
-                            Number(selectedPatient.latest_analysis.anxiety_level) > 4 ? 'text-amber-600 bg-amber-50' : 'text-emerald-600 bg-emerald-50'
-                          }`}>
-                            {selectedPatient.latest_analysis.anxiety_level}/10
-                          </span>
-                        </td>
-                        <td className="px-4 py-4 text-sm">
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${
-                            selectedPatient.latest_analysis.si_status === 'Flagged' ? 'bg-red-600 text-white animate-pulse' : 
-                            selectedPatient.latest_analysis.si_status === 'Stable' ? 'bg-emerald-100 text-emerald-800' : 'bg-stone-100 text-stone-600'
-                          }`}>
-                            {selectedPatient.latest_analysis.si_status === 'Flagged' && <AlertTriangle size={12} />}
-                            {selectedPatient.latest_analysis.si_status}
-                          </span>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <div className="p-4 bg-stone-50/50 dark:bg-stone-900/30 border-t border-stone-100 dark:border-stone-700">
-                    <p className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-1">AI Clinical Summary</p>
-                    <p className="text-sm text-stone-700 dark:text-stone-300 italic">
-                      "{selectedPatient.latest_analysis.clinical_summary}"
-                    </p>
-                  </div>
+              {selectedPatient.aiCalls > 0 ? (
+                <div className="space-y-3">
+                  {Array.from({ length: selectedPatient.aiCalls }).map((_, i) => {
+                    const date = new Date();
+                    date.setDate(date.getDate() - (i * 7 + 3)); // Mocking dates in the past
+                    return (
+                      <div key={i} className="border border-stone-200 dark:border-stone-700 rounded-xl overflow-hidden bg-stone-50 dark:bg-stone-800/50 transition-all">
+                        <button 
+                          onClick={() => toggleCall(i)}
+                          className="w-full flex items-center justify-between p-3 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700/50 transition-colors"
+                        >
+                          <div className="flex items-center gap-3 text-left">
+                            <div className="relative w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
+                              <Bot size={14} className="text-indigo-600 dark:text-indigo-400" />
+                              {selectedPatient.hasUnreadAICall && i === 0 && (
+                                <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-3 w-3 bg-indigo-500 border-2 border-white dark:border-stone-800"></span>
+                                </span>
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-stone-900 dark:text-white">Checkup Call</p>
+                              <p className="text-xs text-stone-500 dark:text-stone-400">{date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 px-3 py-1.5 rounded-lg transition-colors">
+                              View Transcript
+                            </span>
+                            {expandedCallId === i ? <ChevronUp size={16} className="text-stone-400 dark:text-stone-500" /> : <ChevronDown size={16} className="text-stone-400 dark:text-stone-500" />}
+                          </div>
+                        </button>
+                        
+                        {expandedCallId === i && (
+                          <div className="p-4 border-t border-stone-200 dark:border-stone-700 bg-stone-50/50 dark:bg-stone-800/30">
+                            <div>
+                              <p className="text-xs text-stone-500 dark:text-stone-400 uppercase tracking-wider font-semibold mb-1">AI Summary</p>
+                              <p className="text-sm text-stone-600 dark:text-stone-300 leading-relaxed">
+                                {i === 0 
+                                  ? "Patient reported normal sleep patterns over the last few days. Expressed mild anxiety regarding upcoming work deadlines, but demonstrated good use of coping mechanisms discussed in the last session."
+                                  : "Patient discussed feelings of overwhelm related to family obligations. AI guided them through a brief grounding exercise which successfully reduced immediate stress markers."}
+                              </p>
+                            </div>
+                            <div className="mt-4">
+                              <button className="text-sm font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors flex items-center gap-1">
+                                <FileText size={14} />
+                                View Full Transcript
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
-                <div className="text-center py-8 border-2 border-dashed border-stone-100 dark:border-stone-700 rounded-2xl">
-                  <p className="text-sm text-stone-500 dark:text-stone-400">No AI analysis data available yet. Schedule a checkup to generate clinical metrics.</p>
-                </div>
+                <p className="text-sm text-stone-500 dark:text-stone-400">No AI checkups have been conducted yet. Schedule one to gather automated insights between sessions.</p>
               )}
             </div>
           </div>
@@ -290,7 +297,7 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
                   <p className="text-xs text-stone-500 dark:text-stone-400 uppercase tracking-wider font-semibold mb-1">Next Session</p>
                   <div className="flex items-center gap-2 text-stone-900 dark:text-stone-100">
                     <Calendar size={16} className="text-emerald-600 dark:text-emerald-500" />
-                    <span className="font-medium">{selectedPatient.nextSession}</span>
+                    <span className="font-medium">{formatSessionDate(selectedPatient.nextSession)}</span>
                     <span className="text-xs text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-700 px-2 py-0.5 rounded-full">
                       {getDaysUntil(selectedPatient.nextSession)}
                     </span>
@@ -368,7 +375,7 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
         <ScheduleModal 
           isOpen={isScheduleModalOpen} 
           onClose={() => setIsScheduleModalOpen(false)} 
-          patient={patientsList.find(p => p.id === patientForSchedule?.id)}
+          patient={patientForSchedule}
         />
       </div>
     );
@@ -377,7 +384,7 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-8">
       <header>
-        <h1 className="text-3xl font-semibold tracking-tight text-stone-900 dark:text-white">Good morning, Dr. Li</h1>
+        <h1 className="text-3xl font-semibold tracking-tight text-stone-900 dark:text-white">Good morning, Dr. Li 👋</h1>
         <p className="text-stone-500 dark:text-stone-400 mt-1">Here's what's happening with your patients today.</p>
       </header>
 
@@ -395,7 +402,15 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
               onClick={() => setSelectedPatientId(patient.id)}
             >
               <div className="flex items-center gap-4">
-                <img src={patient.avatarUrl} alt={patient.name} className="w-12 h-12 rounded-full object-cover" referrerPolicy="no-referrer" />
+                <div className="relative">
+                  <img src={patient.avatarUrl} alt={patient.name} className="w-12 h-12 rounded-full object-cover" referrerPolicy="no-referrer" />
+                  {patient.hasUnreadAICall && (
+                    <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-indigo-500 border-2 border-white dark:border-stone-800"></span>
+                    </span>
+                  )}
+                </div>
                 <div>
                   <h3 className="font-medium text-stone-900 dark:text-white flex items-center gap-2">
                     {patient.name}
@@ -432,7 +447,7 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
                 <div className="text-right">
                   <p className="text-sm font-medium text-stone-900 dark:text-stone-100">Next Session</p>
                   <div className="flex items-center justify-end gap-2 mt-0.5">
-                    <p className="text-sm text-stone-500 dark:text-stone-400">{patient.nextSession}</p>
+                    <p className="text-sm text-stone-500 dark:text-stone-400">{formatSessionDate(patient.nextSession)}</p>
                     <span className="text-xs text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-700 px-2 py-0.5 rounded-full">
                       {getDaysUntil(patient.nextSession)}
                     </span>
@@ -446,10 +461,10 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
                       }
                       handleScheduleClick(patient, e);
                     }}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
                       newlyAddedPatientId === patient.id 
-                        ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-200 dark:shadow-none animate-bounce-subtle' 
-                        : 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
+                        ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-200 dark:shadow-none animate-bounce-subtle' 
+                        : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-200 dark:shadow-none hover:shadow-md hover:-translate-y-0.5'
                     }`}
                   >
                     <Bot size={16} />
@@ -483,7 +498,7 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
       <ScheduleModal 
         isOpen={isScheduleModalOpen} 
         onClose={() => setIsScheduleModalOpen(false)} 
-        patient={patientsList.find(p => p.id === patientForSchedule?.id)}
+        patient={patientForSchedule}
       />
       <AddPatientModal 
         isOpen={isAddModalOpen} 

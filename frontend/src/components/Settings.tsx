@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Moon, Sun } from 'lucide-react';
+import { Moon, Sun, Phone } from 'lucide-react';
 
 export function Settings() {
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -51,6 +51,29 @@ export function Settings() {
                 }`}
               />
             </button>
+          </div>
+        </div>
+      </div>
+      <div className="bg-white dark:bg-stone-800 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-sm overflow-hidden">
+        <div className="px-6 py-5 border-b border-stone-200 dark:border-stone-700">
+          <h2 className="text-lg font-medium text-stone-900 dark:text-white">Help Center</h2>
+        </div>
+        <div className="p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="p-2.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-xl">
+                <Phone size={20} />
+              </div>
+              <div>
+                <h3 className="font-medium text-stone-900 dark:text-white">Support Phone Number</h3>
+                <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
+                  Call our support team for immediate assistance.
+                </p>
+              </div>
+            </div>
+            <div className="text-stone-900 dark:text-white font-medium text-lg">
+              1-800-123-4567
+            </div>
           </div>
         </div>
       </div>
