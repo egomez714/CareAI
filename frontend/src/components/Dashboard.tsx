@@ -33,17 +33,17 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
         const dbPatients = await response.json();
         
         const formattedPatients = dbPatients.map((dbPatient: any) => ({
-          id: dbPatient.mrn, 
-          name: dbPatient.name || "Unknown Patient",
-          mrn: dbPatient.mrn || "Unknown MRN",
+          id: dbPatient.patient_mrn, 
+          name: dbPatient.patient_name || "Unknown Patient",
+          mrn: dbPatient.patient_mrn || "Unknown MRN",
           age: dbPatient.age || 42,
           phone: dbPatient.patient_phone || dbPatient.phone || "+1 (555) 000-0000",
-          riskLevel: dbPatient.riskLevel || "Low",
+          riskLevel: dbPatient.risk_level || "Low",
           mood: dbPatient.mood || "Stable",
           missedCalls: dbPatient.missedCalls || 0,
           nextSession: dbPatient.nextSession || "Pending",
           lastSession: dbPatient.lastSession || "Unknown",
-          avatarUrl: dbPatient.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(dbPatient.name || "User")}&background=random`,
+          avatarUrl: dbPatient.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(dbPatient.patient_name || "User")}&background=random`,
           conditions: dbPatient.conditions || ["General Monitoring"],
           actionPlans: dbPatient.actionPlans || [],
           latest_analysis: dbPatient.latest_analysis || null,
