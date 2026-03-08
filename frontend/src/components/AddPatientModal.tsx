@@ -9,6 +9,8 @@ export function AddPatientModal({ isOpen, onClose, onAddPatient }: any) {
   const [phone, setPhone] = useState('');
   const [secondPhone, setSecondPhone] = useState('');
   const [condition, setCondition] = useState('');
+  const [actionPlanTitle, setActionPlanTitle] = useState('');
+  const [actionPlanDescription, setActionPlanDescription] = useState('');
   
   if (!isOpen) return null;
 
@@ -45,10 +47,10 @@ export function AddPatientModal({ isOpen, onClose, onAddPatient }: any) {
       actionPlans: [
         {
           id: 'ap-1',
-          title: 'Initial Assessment Plan',
+          title: actionPlanTitle || 'Initial Assessment Plan',
           date: formatDate(today),
           status: 'pending',
-          description: 'Complete initial intake forms, establish baseline metrics, and review medical history prior to the first consultation.'
+          description: actionPlanDescription || 'Complete initial intake forms, establish baseline metrics, and review medical history prior to the first consultation.'
         }
       ],
       upcomingSessions: [
@@ -64,6 +66,8 @@ export function AddPatientModal({ isOpen, onClose, onAddPatient }: any) {
     setPhone('');
     setSecondPhone('');
     setCondition('');
+    setActionPlanTitle('');
+    setActionPlanDescription('');
   };
 
   return (
@@ -168,6 +172,31 @@ export function AddPatientModal({ isOpen, onClose, onAddPatient }: any) {
                 <option value="Schizophrenia">Schizophrenia</option>
                 <option value="Other">Other</option>
               </select>
+            </div>
+
+            <div className="border-t border-stone-200 dark:border-stone-700 pt-4 mt-4">
+              <h3 className="text-sm font-semibold text-stone-900 dark:text-white mb-3">Initial Action Plan</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-stone-700 dark:text-stone-300 mb-1">Plan Title (Optional)</label>
+                  <input 
+                    type="text" 
+                    value={actionPlanTitle}
+                    onChange={e => setActionPlanTitle(e.target.value)}
+                    className="w-full px-3 py-2 border border-stone-200 dark:border-stone-600 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white dark:bg-stone-700 dark:text-white" 
+                    placeholder="Initial Assessment Plan"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-stone-700 dark:text-stone-300 mb-1">Plan Description (Optional)</label>
+                  <textarea 
+                    value={actionPlanDescription}
+                    onChange={e => setActionPlanDescription(e.target.value)}
+                    className="w-full px-3 py-2 border border-stone-200 dark:border-stone-600 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white dark:bg-stone-700 dark:text-white resize-none h-20" 
+                    placeholder="Complete initial intake forms, establish baseline metrics..."
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="pt-4 flex justify-end gap-3">

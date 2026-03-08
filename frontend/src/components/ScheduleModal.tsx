@@ -1,4 +1,4 @@
-import { Bot, X, Calendar as CalendarIcon, Clock, ChevronRight, ChevronLeft, Loader2 } from 'lucide-react';
+import { Bot, X, Calendar as CalendarIcon, Clock, ChevronRight, ChevronLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useState, useEffect } from 'react';
 import { DayPicker } from 'react-day-picker';
@@ -14,7 +14,6 @@ export function ScheduleModal({ isOpen, onClose, patient }: any) {
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduledDatesByPatient, setScheduledDatesByPatient] = useState<Record<string, Date[]>>({});
   const [callingPatients, setCallingPatients] = useState<string[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (isOpen && patient) {
@@ -30,72 +29,6 @@ export function ScheduleModal({ isOpen, onClose, patient }: any) {
   const scheduledDates = scheduledDatesByPatient[patient.id] || [];
   const isCallingNow = callingPatients.includes(patient.id);
 
-  // Pull the latest action plan from the patient metadata
-  const latestActionPlan = patient.actionPlans?.[0]?.description || patient.actionPlans?.[0]?.title || "General check-in";
-
-  const handleTriggerCall = async (isScheduledCall = false) => {
-    setIsSubmitting(true);
-    if (!isScheduledCall) {
-      setCallingPatients(prev => [...prev, patient.id]);
-    }
-
-    try {
-      const payload = {
-        patient_mrn: patient.mrn || patient.id,
-        patient_name: patient.name,
-        patient_phone: patient.phone || "+18056703413", // Fallback
-        risk_level: patient.riskLevel || "Low",
-        si_hi_risk: patient.riskLevel === 'High',
-        action_plan_details: latestActionPlan
-      };
-
-      const response = await fetch('http://localhost:8000/api/trigger-call', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to trigger call');
-      }
-
-      const result = await response.json();
-      console.log('Call triggered:', result);
-      
-      if (isScheduledCall) {
-        const dateStr = selectedDate ? format(selectedDate, 'MMM d, yyyy') : '';
-        const recurringStr = isRecurring ? ` (Recurring ${recurringFrequency})` : '';
-        alert(`AI Checkup scheduled for ${dateStr} at ${selectedTime}${recurringStr}!`);
-        setIsScheduled(true);
-        setScheduledDatesByPatient(prev => {
-          const prevDates = prev[patient.id] || [];
-          const newDates = [selectedDate!, ...recurringDates];
-          const uniqueDates = [...prevDates];
-          newDates.forEach(nd => {
-            if (!uniqueDates.some(ud => isSameDay(ud, nd))) {
-              uniqueDates.push(nd);
-            }
-          });
-          return { ...prev, [patient.id]: uniqueDates };
-        });
-      } else {
-        alert(`Initiating AI Checkup call with ${patient.name} now!`);
-      }
-    } catch (error) {
-      console.error('Error triggering call:', error);
-      alert('Failed to connect to backend. Please ensure the FastAPI server is running.');
-    } finally {
-      setIsSubmitting(false);
-      if (!isScheduledCall) {
-        setTimeout(() => {
-          setCallingPatients(prev => prev.filter(id => id !== patient.id));
-        }, 5000);
-      }
-    }
-  };
-
   const sessionDates = patient.upcomingSessions?.map((s: any) => {
     const [year, month, day] = s.date.split('-');
     return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
@@ -107,6 +40,7 @@ export function ScheduleModal({ isOpen, onClose, patient }: any) {
     const dates = [];
     let currentDate = selectedDate;
     
+    // Show next 12 occurrences for visual feedback
     for (let i = 0; i < 12; i++) {
       if (recurringFrequency === 'daily') {
         currentDate = addDays(currentDate, 1);
@@ -173,25 +107,23 @@ export function ScheduleModal({ isOpen, onClose, patient }: any) {
                   </div>
                 </div>
                 <button 
-                  onClick={() => handleTriggerCall(false)}
-                  disabled={isCallingNow || isSubmitting}
+                  onClick={() => {
+                    alert(`Initiating AI Checkup call with ${patient.name} now!`);
+                    setCallingPatients(prev => [...prev, patient.id]);
+                    setTimeout(() => {
+                      setCallingPatients(prev => prev.filter(id => id !== patient.id));
+                    }, 20000);
+                  }}
+                  disabled={isCallingNow}
                   className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium shadow-sm transition-colors ${
                     isCallingNow 
-                      ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 cursor-wait' 
-                      : 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 border border-emerald-200 dark:border-emerald-800'
+                      ? 'bg-stone-200 dark:bg-stone-800 text-stone-400 dark:text-stone-500 cursor-not-allowed' 
+                      : 'bg-stone-100 dark:bg-stone-700 text-stone-900 dark:text-white hover:bg-stone-200 dark:hover:bg-stone-600'
                   }`}
                 >
-                  {isCallingNow ? <Loader2 className="animate-spin" size={16} /> : <Bot size={16} />}
+                  <Bot size={16} />
                   {isCallingNow ? 'Calling...' : 'Call Now'}
                 </button>
-              </div>
-
-              {/* Action Plan Preview (Informational only) */}
-              <div className="p-3 bg-stone-50 dark:bg-stone-700/30 rounded-xl border border-stone-200 dark:border-stone-600">
-                <label className="block text-xs font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wider mb-1">Active Action Plan</label>
-                <p className="text-sm text-stone-700 dark:text-stone-200 italic">
-                  "{latestActionPlan}"
-                </p>
               </div>
 
               <div className="flex flex-col gap-4">
@@ -273,7 +205,7 @@ export function ScheduleModal({ isOpen, onClose, patient }: any) {
                         setRecurringFrequency(e.target.value);
                         setIsScheduled(false);
                       }}
-                      className="w-full px-3 py-2 border border-stone-200 dark:border-stone-600 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white dark:bg-stone-700 dark:text-white" 
+                      className="w-full px-3 py-2 border border-stone-200 dark:border-stone-600 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none bg-white dark:bg-stone-700 dark:text-white"
                     >
                       <option value="daily">Daily</option>
                       <option value="weekly">Weekly</option>
@@ -313,12 +245,26 @@ export function ScheduleModal({ isOpen, onClose, patient }: any) {
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
-                    onClick={() => handleTriggerCall(true)}
-                    disabled={isSubmitting}
-                    className="px-5 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    onClick={() => {
+                      const dateStr = selectedDate ? format(selectedDate, 'MMM d, yyyy') : '';
+                      const recurringStr = isRecurring ? ` (Recurring ${recurringFrequency})` : '';
+                      alert(`AI Checkup scheduled for ${dateStr} at ${selectedTime}${recurringStr}!`);
+                      setIsScheduled(true);
+                      setScheduledDatesByPatient(prev => {
+                        const prevDates = prev[patient.id] || [];
+                        const newDates = [selectedDate!, ...recurringDates];
+                        const uniqueDates = [...prevDates];
+                        newDates.forEach(nd => {
+                          if (!uniqueDates.some(ud => isSameDay(ud, nd))) {
+                            uniqueDates.push(nd);
+                          }
+                        });
+                        return { ...prev, [patient.id]: uniqueDates };
+                      });
+                    }}
+                    className="px-5 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 shadow-sm"
                   >
-                    {isSubmitting ? <Loader2 className="animate-spin" size={16} /> : null}
-                    {isSubmitting ? 'Scheduling...' : 'Schedule Call'}
+                    Schedule Call
                   </motion.button>
                 ) : null}
               </AnimatePresence>

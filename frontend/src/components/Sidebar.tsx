@@ -2,49 +2,13 @@ import { useState } from 'react';
 import { LayoutDashboard, Calendar, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const Logo = () => (
-  <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-stone-50 to-stone-100 dark:from-stone-800 dark:to-stone-900 shadow-sm border border-stone-200/60 dark:border-stone-700/60 shrink-0">
-    <svg viewBox="0 0 100 100" className="w-7 h-7 drop-shadow-sm" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="logo-grad-new" x1="0%" y1="100%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#1e5474" />
-          <stop offset="45%" stopColor="#4ea1a4" />
-          <stop offset="85%" stopColor="#f4b27f" />
-          <stop offset="100%" stopColor="#f8c89b" />
-        </linearGradient>
-      </defs>
-      
-      {/* Left side - Phone receiver */}
-      <path 
-        d="M 50 18 
-           C 20 0, 0 30, 15 60 
-           C 22 75, 40 85, 55 90 
-           C 50 85, 45 75, 48 65 
-           C 52 55, 35 55, 35 40 
-           C 35 28, 45 22, 50 18 Z" 
-        fill="url(#logo-grad-new)" 
-      />
-      
-      {/* Right side - Outer arc */}
-      <path 
-        d="M 50 18 C 80 0, 100 30, 85 60 C 78 75, 60 85, 55 90" 
-        stroke="url(#logo-grad-new)" 
-        strokeWidth="8" 
-        strokeLinecap="round" 
-        fill="none" 
-      />
-      
-      {/* Right side - Inner arc */}
-      <path 
-        d="M 50 32 C 70 20, 80 40, 70 55 C 65 65, 55 70, 50 75" 
-        stroke="url(#logo-grad-new)" 
-        strokeWidth="8" 
-        strokeLinecap="round" 
-        fill="none" 
-      />
-      
-      {/* Dot */}
-      <circle cx="62" cy="68" r="5" fill="url(#logo-grad-new)" />
-    </svg>
+  <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-stone-50 to-stone-100 dark:from-stone-800 dark:to-stone-900 shadow-sm border border-stone-200/60 dark:border-stone-700/60 shrink-0 overflow-hidden">
+    <img 
+      src="https://media.discordapp.net/attachments/1479659689028485314/1479968693634207889/image.png?ex=69adf7c1&is=69aca641&hm=01d409bb9d4b430168ccae8d1e0194e552dd6fbd8da8013a9a854861502a0cbe&=&format=webp&quality=lossless&width=863&height=471" 
+      alt="Logo" 
+      className="w-full h-full object-cover"
+      referrerPolicy="no-referrer"
+    />
   </div>
 );
 
@@ -103,7 +67,7 @@ export function Sidebar({ currentView, setCurrentView }: SidebarProps) {
       <div className="p-4 border-t border-stone-200 dark:border-stone-800">
         <div className={`flex items-center ${isCollapsed ? 'justify-center px-0' : 'gap-3 px-3'} py-2`}>
           <img 
-            src="https://picsum.photos/seed/dr/100/100" 
+            src="https://cdn.discordapp.com/attachments/1479659689028485314/1479995545836716174/IMG_9593.jpg?ex=69ae10c3&is=69acbf43&hm=f8e988ac6d53e1d07da3a0698603a4085247889960376fcd99d348fc2399757b" 
             alt="Dr. Emily" 
             className="w-10 h-10 rounded-full object-cover border border-stone-200 dark:border-stone-700 shrink-0"
             referrerPolicy="no-referrer"
