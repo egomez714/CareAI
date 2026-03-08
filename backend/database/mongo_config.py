@@ -1,70 +1,79 @@
 import os
 from pymongo import MongoClient
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 
-# Load environment variables (like your connection string)
+# Load environment variables
 load_dotenv()
 
-# 1. Connect to your MongoDB Atlas Cluster
-MONGO_URI = os.getenv("MONGO_URI")
-if not MONGO_URI:
-    print(" Warning: MONGO_URI not found in .env file!")
-
-client = MongoClient(MONGO_URI)
-
-# 2. Select Database and Collections
-db = client["VoiceCareDB"]  # You can name this whatever you want
+client = MongoClient(os.getenv("MONGO_URI"))
+db = client["VoiceCareDB"]
 patients_collection = db["patients"]
 call_logs_collection = db["call_logs"]
 
 def create_or_update_patient(patient_data: dict):
-    """
-    Saves 'Action Plan' and demographic info to MongoDB.
-    Uses the patient's phone number to find and update the document.
-    """
     try:
-        phone_number = patient_data.get("patient_phone")
-        
-        # MongoDB doesn't have a built-in server timestamp constant like Firebase,
-        # so we generate a UTC datetime object right now.
+        mrn = patient_data.get("patient_mrn")
+        if not mrn:
+            print("Error: MRN is required.")
+            return False
+
         patient_data["last_updated"] = datetime.now(timezone.utc)
-
-        # upsert=True means: If it finds the phone number, it updates the doc.
-        # If it doesn't find it, it creates a new one.
+        
+        # Initialize missed calls if not present
         patients_collection.update_one(
-            {"patient_phone": phone_number}, # The filter to find the right patient
-            {"$set": patient_data},          # The data to update
-            upsert=True                      # Create it if it doesn't exist!
+            {"patient_mrn": mrn},
+            {"$set": patient_data},
+            upsert=True
         )
-        
-        print(f"Successfully saved patient to MongoDB: {patient_data.get('patient_name')}")
         return True
     except Exception as e:
-        print(f"Error saving to MongoDB: {e}")
+        print(f"Error: {e}")
         return False
 
-def save_call_log(phone_number: str, risk_level: str, call_status: str, summary: str, is_warning: bool = False):
-    """
-    Saves the result of the AI call. This is what your frontend will read
-    to show the Physician Dashboard.
-    """
+def record_call_attempt(mrn: str):
+    """Marks that a call was just triggered."""
+    patients_collection.update_one(
+        {"patient_mrn": mrn},
+        {"$set": {"last_call_attempt": datetime.now(timezone.utc)},
+         "$inc": {"total_attempts_count": 1}}
+    )
+
+def record_call_completion(mrn: str, success: bool):
+    """Reset missed calls on success, increment on failure."""
+    now = datetime.now(timezone.utc)
+    if success:
+        patients_collection.update_one(
+            {"patient_mrn": mrn},
+            {"$set": {"consecutive_missed_calls": 0, "last_successful_call": now}}
+        )
+    else:
+        patients_collection.update_one(
+            {"patient_mrn": mrn},
+            {"$inc": {"consecutive_missed_calls": 1}}
+        )
+
+def get_patient_by_mrn(mrn: str):
     try:
-        log_data = {
-            "patient_phone": phone_number,
-            "risk_level": risk_level,
-            "call_status": call_status,
-            "summary": summary,
-            "is_warning_flagged": is_warning,
-            "timestamp": datetime.now(timezone.utc)
-        }
-        
-        # insert_one automatically generates a unique _id for this log
-        call_logs_collection.insert_one(log_data)
-        
-        print("Successfully logged call results to MongoDB.")
-        return True
-    
+        patient = patients_collection.find_one({"patient_mrn": mrn})
+        if patient:
+            # Calculate dynamic warnings
+            now = datetime.now(timezone.utc)
+            missed = patient.get("consecutive_missed_calls", 0)
+            last_success = patient.get("last_successful_call")
+            
+            warnings = []
+            if missed >= 3:
+                warnings.append("URGENT: 3+ Missed Calls")
+            
+            if last_success:
+                # Check if it's been more than 3 days (using native datetime comparison)
+                if now - last_success > timedelta(days=3):
+                    warnings.append("INACTIVE: No check-in for 3+ days")
+            
+            patient["active_warnings"] = warnings
+            
+        return patient
     except Exception as e:
-        print(f"Error logging call: {e}")
-        return False
+        print(f"Error: {e}")
+        return None
