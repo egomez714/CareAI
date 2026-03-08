@@ -54,7 +54,6 @@ class ConnectionManager:
 
     async def broadcast(self, message: dict):
         print(f"📡 Broadcasting: {message.get('type')} for {message.get('mrn')}")
-        # Increase delay to 1.5s to ensure frontend hot-reload is finished
         await asyncio.sleep(1.5) 
         for connection in self.active_connections:
             try:
@@ -78,7 +77,6 @@ def serialize_doc(doc):
     if not doc: return None
     doc["_id"] = str(doc["_id"])
     
-    # Recursively convert datetimes to strings
     def convert_dates(item):
         if isinstance(item, dict):
             return {k: convert_dates(v) for k, v in item.items()}
@@ -90,7 +88,6 @@ def serialize_doc(doc):
 
     doc = convert_dates(doc)
 
-    # MAP AI ANALYSIS TO FRONTEND TAGS
     if "latest_analysis" in doc:
         ai = doc["latest_analysis"]
         doc["riskLevel"] = ai.get("risk_level", doc.get("risk_level", "Low"))
@@ -103,6 +100,10 @@ def serialize_doc(doc):
     doc["active_warnings"] = doc.get("active_warnings", [])
     doc["name"] = doc.get("patient_name", "Unknown Patient")
     doc["mrn"] = doc.get("patient_mrn", "MRN-UNKNOWN")
+    
+    # Ensure history is always a list for the frontend
+    doc["analysis_history"] = doc.get("analysis_history", [])
+    
     return doc
 
 # 4. API Endpoints
@@ -118,7 +119,6 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.get("/api/patients")
 async def get_all_patients():
-    """Returns all patients stored in MongoDB."""
     cursor = patients_collection.find({})
     return [serialize_doc(p) for p in cursor]
 
@@ -178,7 +178,6 @@ async def trigger_call(request: PatientPlan):
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 def find_key_recursive(data, target_key):
-    """Recursively search for a key in a nested dictionary/list."""
     if isinstance(data, dict):
         if target_key in data:
             return data[target_key]
@@ -198,7 +197,6 @@ async def handle_transcript(request: Request):
     try:
         payload = await request.json()
         
-        # --- 🛑 HACKATHON DEBUG TRAP ---
         print("\n=== 🚨 RAW ELEVENLABS PAYLOAD RECEIVED ===")
         with open("debug_webhook.json", "w") as f:
             json.dump(payload, f, indent=4)
@@ -208,7 +206,6 @@ async def handle_transcript(request: Request):
         payload_type = payload.get("type")
         print(f"📩 Webhook Received: {payload_type}")
         
-        # 1. FIND MRN FIRST (OR PHONE FALLBACK)
         patient_mrn = find_key_recursive(payload, "patient_mrn")
         patient_phone = find_key_recursive(payload, "patient_phone")
         patient_name = find_key_recursive(payload, "patient_name") or "Unknown"
@@ -223,7 +220,10 @@ async def handle_transcript(request: Request):
             print("⚠️ Critical: Could not find MRN in payload or via phone fallback.")
             return {"status": "ignored"}
 
-        # 2. HANDLE 'call_ended' or 'call_initiation_failed'
+        # Fetch existing patient to append to history
+        existing_patient = get_patient_by_mrn(patient_mrn)
+        current_history = existing_patient.get("analysis_history", []) if existing_patient else []
+
         if payload_type in ["call_ended", "call_initiation_failed"] or (not payload_type and "summary" in payload):
             if payload_type == "call_initiation_failed":
                 print(f"❌ Call failed to initiate for {patient_mrn}")
@@ -253,9 +253,12 @@ async def handle_transcript(request: Request):
                     score = int(mood_match.group(1))
                     analysis_data["mood"] = "Improving" if score > 7 else "Stable" if score > 4 else "Declining"
                 
+                current_history.insert(0, analysis_data)
+                
                 create_or_update_patient({
                     "patient_mrn": patient_mrn,
                     "latest_analysis": analysis_data,
+                    "analysis_history": current_history,
                     "call_status": payload.get("call_status", "Completed"),
                     "eleven_labs_last_call_metadata": payload
                 })
@@ -275,11 +278,9 @@ async def handle_transcript(request: Request):
             
             return {"status": "success"}
 
-        # 3. HANDLE 'post_call_transcription'
         if payload_type == "post_call_transcription":
             print(f"🔍 Processing Analysis for: {patient_name} (MRN: {patient_mrn})")
             
-            # 🚨 THE FIX: Dig into the "data" object!
             payload_data = payload.get("data", {})
             transcript_data = payload_data.get("transcript", [])
             
@@ -292,13 +293,9 @@ async def handle_transcript(request: Request):
                 await manager.broadcast({"type": "CALL_MISSED", "mrn": patient_mrn, "name": patient_name})
                 return {"status": "missed_call"}
 
-            # Grab the raw transcript securely
             raw_text = "\n".join([f"{t.get('role', 'UNKNOWN').upper()}: {t.get('message', '')}" for t in transcript_data if t.get('message')])
-            
-            # Grab whatever JSON object your partner's tool outputted from the "data" object
             partner_json_output = payload_data.get("analysis", {}) 
             
-            # THE NEW SCRIBE PROMPT
             prompt = f"""
             You are a clinical medical scribe. Your job is to read the raw data object and the transcript from an AI check-in, and translate it into a single, professional, human-readable summary paragraph.
             
@@ -330,9 +327,12 @@ async def handle_transcript(request: Request):
                     "call_status": "Completed"
                 }
 
+                current_history.insert(0, final_save_data)
+
                 create_or_update_patient({
                     "patient_mrn": patient_mrn,
                     "latest_analysis": final_save_data,
+                    "analysis_history": current_history,
                     "raw_transcript": raw_text,
                     "eleven_labs_post_call_payload": payload
                 })

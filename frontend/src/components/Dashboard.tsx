@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Bot, ChevronLeft, Calendar, Clock, FileText, PhoneMissed, ClipboardList, CheckCircle2, Circle, Clock3, FileDown, ChevronDown, ChevronUp, X, AlertTriangle } from 'lucide-react';
+import { Bot, ChevronLeft, Calendar, Clock, FileText, PhoneMissed, ClipboardList, CheckCircle2, Circle, Clock3, FileDown, ChevronDown, ChevronUp, X, AlertTriangle, MessageSquare } from 'lucide-react';
 
 import { ScheduleModal } from './ScheduleModal';
 import { AddPatientModal } from './AddPatientModal';
@@ -17,6 +17,9 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
   const [expandedPlanId, setExpandedPlanId] = useState<string | null>(null);
   const [newlyAddedPatientId, setNewlyAddedPatientId] = useState<string | null>(null);
   const [expandedCallId, setExpandedCallId] = useState<number | null>(null);
+  
+  // 🚨 NEW STATE: Controls the Chat History dropdown
+  const [showTranscriptFor, setShowTranscriptFor] = useState<number | null>(null);
 
   const [patientsList, setPatientsList] = useState<any[]>([]);
 
@@ -29,28 +32,25 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
       if (response.ok) {
         const dbPatients = await response.json();
         
-        // Map the DB data to match exactly what your React UI expects
         const formattedPatients = dbPatients.map((dbPatient: any) => ({
-          id: dbPatient.mrn, // Map DB 'mrn' to UI 'id'
+          id: dbPatient.mrn, 
           name: dbPatient.name || "Unknown Patient",
           mrn: dbPatient.mrn || "Unknown MRN",
-          
-          // 🚨 FIX: Added age mapping for the UI (defaults to 42 for the demo if missing)
           age: dbPatient.age || 42,
-          
-          // FIX: Added robust phone mapping
           phone: dbPatient.patient_phone || dbPatient.phone || "+1 (555) 000-0000",
-          
           riskLevel: dbPatient.riskLevel || "Low",
           mood: dbPatient.mood || "Stable",
           missedCalls: dbPatient.missedCalls || 0,
           nextSession: dbPatient.nextSession || "Pending",
           lastSession: dbPatient.lastSession || "Unknown",
-          // Fallbacks for UI graphics
           avatarUrl: dbPatient.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(dbPatient.name || "User")}&background=random`,
           conditions: dbPatient.conditions || ["General Monitoring"],
           actionPlans: dbPatient.actionPlans || [],
-          latest_analysis: dbPatient.latest_analysis || null
+          latest_analysis: dbPatient.latest_analysis || null,
+          analysis_history: dbPatient.analysis_history || (dbPatient.latest_analysis ? [dbPatient.latest_analysis] : []),
+          
+          // 🚨 FIX: Extracting the Chat History (Transcript) from MongoDB
+          rawTranscript: dbPatient.raw_transcript || null
         }));
 
         setPatientsList(formattedPatients);
@@ -62,7 +62,7 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
   }, []);
 
   useEffect(() => {
-    syncWithBackend(); // Sync on mount
+    syncWithBackend(); 
   }, [syncWithBackend]);
 
   // --- LIVE UPDATES LOGIC ---
@@ -99,14 +99,18 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
       if (!response.ok) throw new Error("Failed to fetch updated patient");
       
       const updatedPatient = await response.json();
-      console.log("📥 New Patient Data from DB:", updatedPatient);
 
       setPatientsList(prev => {
         return prev.map(p => {
-          // Match by MRN (or ID as fallback)
           if (p.mrn === mrn || p.id === mrn) {
-            console.log(`Matching patient found: ${p.name}. Updating UI state...`);
-            return { ...p, ...updatedPatient, age: updatedPatient.age || p.age, phone: updatedPatient.patient_phone || p.phone };
+            return { 
+              ...p, 
+              ...updatedPatient, 
+              age: updatedPatient.age || p.age, 
+              phone: updatedPatient.patient_phone || p.phone,
+              analysis_history: updatedPatient.analysis_history || (updatedPatient.latest_analysis ? [updatedPatient.latest_analysis] : []),
+              rawTranscript: updatedPatient.raw_transcript || p.rawTranscript
+            };
           }
           return p;
         });
@@ -153,16 +157,13 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
 
   const toggleCall = (id: number) => {
     setExpandedCallId(prev => prev === id ? null : id);
+    setShowTranscriptFor(null); // Close chat history when closing the log
   };
 
   const handleAddPatient = (newPatient: any) => {
     setPatientsList([...patientsList, newPatient]);
     setNewlyAddedPatientId(newPatient.id);
-    
-    // Remove the highlight after 10 seconds
-    setTimeout(() => {
-      setNewlyAddedPatientId(null);
-    }, 10000);
+    setTimeout(() => setNewlyAddedPatientId(null), 10000);
   };
 
   const selectedPatient = patientsList.find(p => p.id === selectedPatientId);
@@ -184,17 +185,23 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
             <img src={selectedPatient.avatarUrl} alt={selectedPatient.name} className="w-24 h-24 rounded-2xl object-cover shadow-sm" referrerPolicy="no-referrer" />
             <div>
               <h1 className="text-3xl font-semibold text-stone-900 dark:text-white">{selectedPatient.name}</h1>
-              <div className="text-stone-500 dark:text-stone-400 mt-1 flex flex-wrap items-center gap-2">
-                <span>{selectedPatient.age} years old</span>
+              
+              <div className="text-stone-500 dark:text-stone-400 mt-1 flex flex-wrap items-center gap-2 text-sm font-medium">
+                <span>{selectedPatient.age || "Unknown"} years old</span>
                 <span>•</span>
-                <div className="flex flex-wrap gap-1">
-                  {selectedPatient.conditions.map((condition: string, index: number) => (
-                    <span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-stone-100 dark:bg-stone-700 text-stone-700 dark:text-stone-300">
-                      {condition}
-                    </span>
-                  ))}
-                </div>
+                <span>MRN: {selectedPatient.mrn || "Unknown"}</span>
+                <span>•</span>
+                <span>{selectedPatient.phone || "Unknown Phone"}</span>
               </div>
+              
+              <div className="flex flex-wrap gap-1 mt-2">
+                {selectedPatient.conditions.map((condition: string, index: number) => (
+                  <span key={index} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-stone-100 dark:bg-stone-700 text-stone-700 dark:text-stone-300">
+                    {condition}
+                  </span>
+                ))}
+              </div>
+              
               <div className="flex gap-2 mt-4">
                 <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
                   selectedPatient.mood === 'Improving' ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400' :
@@ -232,66 +239,96 @@ export function Dashboard({ setCurrentView }: DashboardProps) {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
             
-            {/* 🧠 AI Checkup Logs Data Integration */}
+            {/* 🧠 History Call Logs Data Integration */}
             <div className="bg-white dark:bg-stone-800 p-6 rounded-2xl border border-stone-200 dark:border-stone-700 shadow-sm">
               <div className="flex items-center gap-2 mb-4">
                 <Bot size={20} className="text-emerald-600 dark:text-emerald-400" />
-                <h3 className="text-lg font-medium text-stone-900 dark:text-white">AI Checkup Call Logs</h3>
+                <h3 className="text-lg font-medium text-stone-900 dark:text-white">AI Checkup History</h3>
               </div>
               
-              {selectedPatient.latest_analysis ? (
+              {selectedPatient.analysis_history && selectedPatient.analysis_history.length > 0 ? (
                 <div className="space-y-3">
-                  <div className="border border-emerald-100 dark:border-emerald-800/40 rounded-xl overflow-hidden bg-stone-50 dark:bg-stone-800/50 transition-all">
-                    <button 
-                      onClick={() => toggleCall(0)}
-                      className="w-full flex items-center justify-between p-3 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700/50 transition-colors"
-                    >
-                      <div className="flex items-center gap-3 text-left">
-                        <div className="relative w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
-                          <Bot size={14} className="text-emerald-600 dark:text-emerald-400" />
-                          <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border-2 border-white dark:border-stone-800"></span>
+                  {selectedPatient.analysis_history.map((analysis: any, index: number) => (
+                    <div key={index} className={`border rounded-xl overflow-hidden transition-all ${index === 0 ? 'border-emerald-100 dark:border-emerald-800/40 bg-stone-50 dark:bg-stone-800/50' : 'border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800'}`}>
+                      <button 
+                        onClick={() => toggleCall(index)}
+                        className="w-full flex items-center justify-between p-3 hover:bg-stone-50 dark:hover:bg-stone-700/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3 text-left">
+                          <div className={`relative w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${index === 0 ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400' : 'bg-stone-100 dark:bg-stone-700 text-stone-500 dark:text-stone-400'}`}>
+                            <Bot size={14} />
+                            {index === 0 && (
+                              <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border-2 border-white dark:border-stone-800"></span>
+                              </span>
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-stone-900 dark:text-white">
+                              {index === 0 ? "Latest AI Checkup" : "Previous AI Checkup"}
+                            </p>
+                            <p className="text-xs text-stone-500 dark:text-stone-400">{analysis.date}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${index === 0 ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20' : 'text-stone-600 dark:text-stone-400 bg-stone-100 dark:bg-stone-700/50'}`}>
+                            View Insight
                           </span>
+                          {expandedCallId === index ? <ChevronUp size={16} className="text-stone-400 dark:text-stone-500" /> : <ChevronDown size={16} className="text-stone-400 dark:text-stone-500" />}
                         </div>
-                        <div>
-                          <p className="text-sm font-medium text-stone-900 dark:text-white">Latest AI Checkup</p>
-                          <p className="text-xs text-stone-500 dark:text-stone-400">{selectedPatient.latest_analysis.date}</p>
+                      </button>
+                      
+                      {expandedCallId === index && (
+                        <div className={`p-4 border-t ${index === 0 ? 'border-emerald-100 dark:border-emerald-800/40 bg-emerald-50/30 dark:bg-emerald-900/10' : 'border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800/30'}`}>
+                          <div>
+                            <p className={`flex items-center gap-1.5 text-xs uppercase tracking-wider font-bold mb-2 ${index === 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-stone-500 dark:text-stone-400'}`}>
+                              <Bot size={14} /> Gemini Clinical Summary
+                            </p>
+                            <p className="text-sm text-stone-700 dark:text-stone-200 leading-relaxed font-medium">
+                              {analysis.clinical_summary}
+                            </p>
+                          </div>
+                          <div className="mt-4 flex flex-col gap-3 border-t border-stone-200/60 dark:border-stone-700 pt-3">
+                            <div className="flex gap-4 items-center">
+                              {analysis.mood && (
+                                 <div className="text-xs text-stone-500 dark:text-stone-400">
+                                   <span className="font-semibold text-stone-700 dark:text-stone-300">Detected Mood:</span> {analysis.mood}
+                                 </div>
+                              )}
+                              {analysis.risk_level && (
+                                 <div className="text-xs text-stone-500 dark:text-stone-400">
+                                   <span className="font-semibold text-stone-700 dark:text-stone-300">Assessed Risk:</span> {analysis.risk_level}
+                                 </div>
+                              )}
+                            </div>
+                            
+                            {/* 🚨 CHAT HISTORY BUTTON & DROPDOWN */}
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowTranscriptFor(prev => prev === index ? null : index);
+                              }}
+                              className={`flex items-center gap-1.5 text-xs font-semibold w-fit transition-colors ${index === 0 ? 'text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300' : 'text-stone-500 hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-300'}`}
+                            >
+                              <MessageSquare size={14} />
+                              {showTranscriptFor === index ? "Hide Chat History" : "View Chat History"}
+                            </button>
+
+                            {showTranscriptFor === index && (
+                              <div className="mt-2 p-3 bg-white dark:bg-stone-900 rounded-lg border border-stone-200 dark:border-stone-700 max-h-48 overflow-y-auto shadow-inner">
+                                <p className="text-xs text-stone-600 dark:text-stone-300 whitespace-pre-wrap font-mono leading-relaxed">
+                                  {index === 0 && selectedPatient.rawTranscript 
+                                    ? selectedPatient.rawTranscript 
+                                    : "Chat history not currently available for older calls."}
+                                </p>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1.5 rounded-lg transition-colors">
-                          View Insight
-                        </span>
-                        {expandedCallId === 0 ? <ChevronUp size={16} className="text-stone-400 dark:text-stone-500" /> : <ChevronDown size={16} className="text-stone-400 dark:text-stone-500" />}
-                      </div>
-                    </button>
-                    
-                    {expandedCallId === 0 && (
-                      <div className="p-4 border-t border-emerald-100 dark:border-emerald-800/40 bg-emerald-50/30 dark:bg-emerald-900/10">
-                        <div>
-                          <p className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 uppercase tracking-wider font-bold mb-2">
-                            <Bot size={14} /> Gemini Clinical Summary
-                          </p>
-                          <p className="text-sm text-stone-700 dark:text-stone-200 leading-relaxed font-medium">
-                            {selectedPatient.latest_analysis.clinical_summary}
-                          </p>
-                        </div>
-                        <div className="mt-4 flex gap-4 items-center border-t border-stone-200/60 dark:border-stone-700 pt-3">
-                          {selectedPatient.latest_analysis.mood && (
-                             <div className="text-xs text-stone-500 dark:text-stone-400">
-                               <span className="font-semibold text-stone-700 dark:text-stone-300">Detected Mood:</span> {selectedPatient.latest_analysis.mood}
-                             </div>
-                          )}
-                          {selectedPatient.latest_analysis.risk_level && (
-                             <div className="text-xs text-stone-500 dark:text-stone-400">
-                               <span className="font-semibold text-stone-700 dark:text-stone-300">Assessed Risk:</span> {selectedPatient.latest_analysis.risk_level}
-                             </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <p className="text-sm text-stone-500 dark:text-stone-400 italic">No AI checkups have been conducted yet. Schedule one to gather automated insights between sessions.</p>
