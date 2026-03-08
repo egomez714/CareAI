@@ -2,48 +2,50 @@ import { useState } from 'react';
 import { LayoutDashboard, Calendar, Settings, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const Logo = () => (
-  <svg viewBox="0 0 100 100" className="w-8 h-8 shrink-0" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="logo-grad-main" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#1a4b6b" />
-        <stop offset="50%" stopColor="#2b7a94" />
-        <stop offset="100%" stopColor="#67c2b8" />
-      </linearGradient>
-      <linearGradient id="logo-grad-accent" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#67c2b8" />
-        <stop offset="100%" stopColor="#f0a77b" />
-      </linearGradient>
-      <linearGradient id="logo-grad-heart" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#2b7a94" />
-        <stop offset="100%" stopColor="#f0a77b" />
-      </linearGradient>
-    </defs>
-    
-    {/* Person Head */}
-    <circle cx="38" cy="28" r="8" fill="url(#logo-grad-main)" />
-    
-    {/* Person Body / Bottom Curve */}
-    <path 
-      d="M 45 35 C 25 40, 20 65, 35 80 C 50 95, 75 85, 75 70" 
-      stroke="url(#logo-grad-main)" 
-      strokeWidth="14" 
-      strokeLinecap="round" 
-      fill="none" 
-    />
-    
-    {/* Heart Speech Bubble */}
-    <path 
-      d="M 50 62 C 40 62, 35 50, 45 45 C 48 43, 50 46, 50 46 C 50 46, 52 43, 55 45 C 65 50, 60 62, 50 62 Z" 
-      fill="url(#logo-grad-heart)" 
-    />
-    <path d="M 45 60 L 40 68 L 48 62 Z" fill="url(#logo-grad-heart)" />
-    
-    {/* Right Waves */}
-    <path d="M 50 20 A 30 30 0 0 1 75 45" stroke="url(#logo-grad-main)" strokeWidth="7" strokeLinecap="round" fill="none" />
-    <path d="M 60 15 A 40 40 0 0 1 85 45" stroke="url(#logo-grad-accent)" strokeWidth="7" strokeLinecap="round" fill="none" />
-    <path d="M 75 65 A 15 15 0 0 0 85 55" stroke="url(#logo-grad-main)" strokeWidth="7" strokeLinecap="round" fill="none" />
-    <circle cx="85" cy="50" r="4" fill="url(#logo-grad-main)" />
-  </svg>
+  <div className="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-stone-50 to-stone-100 dark:from-stone-800 dark:to-stone-900 shadow-sm border border-stone-200/60 dark:border-stone-700/60 shrink-0">
+    <svg viewBox="0 0 100 100" className="w-7 h-7 drop-shadow-sm" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="logo-grad-new" x1="0%" y1="100%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#1e5474" />
+          <stop offset="45%" stopColor="#4ea1a4" />
+          <stop offset="85%" stopColor="#f4b27f" />
+          <stop offset="100%" stopColor="#f8c89b" />
+        </linearGradient>
+      </defs>
+      
+      {/* Left side - Phone receiver */}
+      <path 
+        d="M 50 18 
+           C 20 0, 0 30, 15 60 
+           C 22 75, 40 85, 55 90 
+           C 50 85, 45 75, 48 65 
+           C 52 55, 35 55, 35 40 
+           C 35 28, 45 22, 50 18 Z" 
+        fill="url(#logo-grad-new)" 
+      />
+      
+      {/* Right side - Outer arc */}
+      <path 
+        d="M 50 18 C 80 0, 100 30, 85 60 C 78 75, 60 85, 55 90" 
+        stroke="url(#logo-grad-new)" 
+        strokeWidth="8" 
+        strokeLinecap="round" 
+        fill="none" 
+      />
+      
+      {/* Right side - Inner arc */}
+      <path 
+        d="M 50 32 C 70 20, 80 40, 70 55 C 65 65, 55 70, 50 75" 
+        stroke="url(#logo-grad-new)" 
+        strokeWidth="8" 
+        strokeLinecap="round" 
+        fill="none" 
+      />
+      
+      {/* Dot */}
+      <circle cx="62" cy="68" r="5" fill="url(#logo-grad-new)" />
+    </svg>
+  </div>
 );
 
 interface SidebarProps {
@@ -102,14 +104,14 @@ export function Sidebar({ currentView, setCurrentView }: SidebarProps) {
         <div className={`flex items-center ${isCollapsed ? 'justify-center px-0' : 'gap-3 px-3'} py-2`}>
           <img 
             src="https://picsum.photos/seed/dr/100/100" 
-            alt="Dr. Sarah" 
+            alt="Dr. Emily" 
             className="w-10 h-10 rounded-full object-cover border border-stone-200 dark:border-stone-700 shrink-0"
             referrerPolicy="no-referrer"
           />
           {!isCollapsed && (
             <div className="flex flex-col text-left whitespace-nowrap overflow-hidden">
-              <span className="text-sm font-medium text-stone-900 dark:text-white">Dr. Sarah Jenkins</span>
-              <span className="text-xs text-stone-500 dark:text-stone-400">Clinical Psychologist</span>
+              <span className="text-sm font-medium text-stone-900 dark:text-white">Dr. Emily Li</span>
+              <span className="text-xs text-stone-500 dark:text-stone-400">Psychotherapist</span>
             </div>
           )}
         </div>
