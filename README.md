@@ -4,9 +4,9 @@
 
 TheraCaIl is an AI-based Treatment Alliance Aid for clinicians whose patients struggle to complete therapy action plans between sessions. It gives therapists a dashboard for patient status, triggers empathetic AI phone check-ins, summarizes patient responses, and flags urgent risk signals so clinicians can follow up faster.
 
-**Devpost:** [devpost.com/software/theracail](https://devpost.com/software/theracail)  
-**GitHub:** [github.com/egomez714/TheraCaIl](https://github.com/egomez714/TheraCaIl)  
-**Demo video:** https://youtu.be/Q2bwVuf-Zf4?si=b2grXLFDcZSg5sYg  
+**Devpost:** [devpost.com/software/theracail](https://devpost.com/software/theracail)
+**GitHub:** [github.com/egomez714/TheraCaIl](https://github.com/egomez714/TheraCaIl)
+**Demo video:** https://youtu.be/Q2bwVuf-Zf4?si=b2grXLFDcZSg5sYg
 **Pitch video:** https://youtu.be/wQpIodQd1tY?si=aCFwFE-CUvhu9SYd
 
 ## Why We Built It
@@ -127,9 +127,9 @@ TheraCaIl was submitted to [HackMerced XI](https://devpost.com/software/theracai
 
 ## Video Links
 
-These are reserved so the project has no dead ends once the videos are recorded:
+Project walkthrough videos:
 
-**Demo video:** https://youtu.be/Q2bwVuf-Zf4?si=b2grXLFDcZSg5sYg  
+**Demo video:** https://youtu.be/Q2bwVuf-Zf4?si=b2grXLFDcZSg5sYg
 **Pitch video:** https://youtu.be/wQpIodQd1tY?si=aCFwFE-CUvhu9SYd
 
 ## Links
