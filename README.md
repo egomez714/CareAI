@@ -6,8 +6,8 @@ TheraCaIl is an AI-based Treatment Alliance Aid for clinicians whose patients st
 
 **Devpost:** [devpost.com/software/theracail](https://devpost.com/software/theracail)  
 **GitHub:** [github.com/egomez714/TheraCaIl](https://github.com/egomez714/TheraCaIl)  
-**Demo video:** Coming soon  
-**Pitch video:** Coming soon
+**Demo video:** https://youtu.be/Q2bwVuf-Zf4?si=b2grXLFDcZSg5sYg
+**Pitch video:** https://youtu.be/wQpIodQd1tY?si=aCFwFE-CUvhu9SYd
 
 ## Why We Built It
 
@@ -129,8 +129,8 @@ TheraCaIl was submitted to [HackMerced XI](https://devpost.com/software/theracai
 
 These are reserved so the project has no dead ends once the videos are recorded:
 
-- **Demo video:** Coming soon
-- **Pitch video:** Coming soon
+**Demo video:** https://youtu.be/Q2bwVuf-Zf4?si=b2grXLFDcZSg5sYg
+**Pitch video:** https://youtu.be/wQpIodQd1tY?si=aCFwFE-CUvhu9SYd
 
 ## Links
 
